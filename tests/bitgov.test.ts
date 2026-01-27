@@ -1,5 +1,6 @@
 
 import { describe, expect, it } from "vitest";
+import { Cl } from "@stacks/transactions";
 
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
@@ -14,7 +15,7 @@ describe("BitGov Counter Logic", () => {
 
     it("increments correctly", () => {
         const { result } = simnet.callPublicFn("bitgov", "increment", [], deployer);
-        expect(result).toBeOk(simnet.uint(1));
+        expect(result).toBeOk(Cl.uint(1));
 
         // Check value
         const check = simnet.callReadOnlyFn("bitgov", "get-general-counter", [], deployer);
@@ -34,13 +35,13 @@ describe("BitGov Counter Logic", () => {
         simnet.callPublicFn("bitgov", "increment", [], deployer);
 
         const { result } = simnet.callPublicFn("bitgov", "decrement", [], deployer);
-        expect(result).toBeOk(simnet.uint(0));
+        expect(result).toBeOk(Cl.uint(0));
     });
 
     it("fails to decrement below 0", () => {
         // Current state should be 0 (if reset)
         const { result } = simnet.callPublicFn("bitgov", "decrement", [], deployer);
-        expect(result).toBeErr(simnet.uint(109)); // Underflow error
+        expect(result).toBeErr(Cl.uint(109)); // Underflow error
     });
 });
 
@@ -52,73 +53,73 @@ describe("BitGov Governance Logic", () => {
         const { result } = simnet.callPublicFn(
             "bitgov",
             "create-proposal",
-            [simnet.stringAscii(title), simnet.stringUtf8(description)],
+            [Cl.stringAscii(title), Cl.stringUtf8(description)],
             deployer
         );
 
-        expect(result).toBeOk(simnet.uint(0)); // First ID is u0
+        expect(result).toBeOk(Cl.uint(0)); // First ID is u0
 
-        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [simnet.uint(0)], deployer);
+        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [Cl.uint(0)], deployer);
         expect(proposal.result).toBeSome(expect.objectContaining({
-            title: simnet.stringAscii(title),
-            status: simnet.stringAscii("active")
+            title: Cl.stringAscii(title),
+            status: Cl.stringAscii("active")
         }));
     });
 
     it("allows voting", () => {
         // Setup proposal
-        simnet.callPublicFn("bitgov", "create-proposal", [simnet.stringAscii("Vote Test"), simnet.stringUtf8("Desc")], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Vote Test"), Cl.stringUtf8("Desc")], deployer);
 
         const voteAmount = 100;
         const { result } = simnet.callPublicFn(
             "bitgov",
             "vote",
-            [simnet.uint(0), simnet.bool(true), simnet.uint(voteAmount)],
+            [Cl.uint(0), Cl.bool(true), Cl.uint(voteAmount)],
             voter1
         );
 
-        expect(result).toBeOk(simnet.bool(true));
+        expect(result).toBeOk(Cl.bool(true));
 
         // Check vote recorded
-        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [simnet.uint(0)], deployer);
+        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [Cl.uint(0)], deployer);
         // Inspect tuple structure for votes-for
         // Simnet return types are structured.
         // We can rely on basic execution success for now or deep inspect.
     });
 
     it("prevents double voting", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [simnet.stringAscii("Double Vote"), simnet.stringUtf8("Desc")], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Double Vote"), Cl.stringUtf8("Desc")], deployer);
 
-        simnet.callPublicFn("bitgov", "vote", [simnet.uint(0), simnet.bool(true), simnet.uint(100)], voter1);
+        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true), Cl.uint(100)], voter1);
 
-        const { result } = simnet.callPublicFn("bitgov", "vote", [simnet.uint(0), simnet.bool(false), simnet.uint(100)], voter1);
-        expect(result).toBeErr(simnet.uint(105)); // ERR_ALREADY_VOTED
+        const { result } = simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(false), Cl.uint(100)], voter1);
+        expect(result).toBeErr(Cl.uint(105)); // ERR_ALREADY_VOTED
     });
 
     it("executes a passed proposal", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [simnet.stringAscii("Exec Test"), simnet.stringUtf8("Desc")], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Exec Test"), Cl.stringUtf8("Desc")], deployer);
 
         // Vote Yes > No
-        simnet.callPublicFn("bitgov", "vote", [simnet.uint(0), simnet.bool(true), simnet.uint(100)], voter1);
+        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true), Cl.uint(100)], voter1);
 
         // Mine blocks to pass voting period (144 blocks)
         simnet.mineEmptyBlocks(145);
 
-        const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [simnet.uint(0)], deployer);
-        expect(result).toBeOk(simnet.bool(true)); // Passed
+        const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [Cl.uint(0)], deployer);
+        expect(result).toBeOk(Cl.bool(true)); // Passed
 
         // Check status
-        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [simnet.uint(0)], deployer);
+        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [Cl.uint(0)], deployer);
         expect(proposal.result).toBeSome(expect.objectContaining({
-            status: simnet.stringAscii("passed"),
-            executed: simnet.bool(true)
+            status: Cl.stringAscii("passed"),
+            executed: Cl.bool(true)
         }));
     });
 
     it("fails execution if voting period not ended", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [simnet.stringAscii("Early Exec"), simnet.stringUtf8("Desc")], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Early Exec"), Cl.stringUtf8("Desc")], deployer);
 
-        const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [simnet.uint(0)], deployer);
-        expect(result).toBeErr(simnet.uint(108)); // ERR_EXECUTION_DELAY_NOT_MET
+        const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [Cl.uint(0)], deployer);
+        expect(result).toBeErr(Cl.uint(108)); // ERR_EXECUTION_DELAY_NOT_MET
     });
 });
