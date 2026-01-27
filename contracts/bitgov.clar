@@ -58,6 +58,7 @@
 
 ;; 1. Create Proposal
 (define-public (create-proposal (title (string-ascii 50)) (description (string-utf8 500)))
+  (asserts! (is-some (map-get? members tx-sender)) ERR_UNAUTHORIZED)
   (let
     (
       (current-count (var-get proposal-count))
@@ -93,6 +94,7 @@
 
 ;; 2. Vote
 (define-public (vote (proposal-id uint) (vote-for bool) (amount uint))
+ (asserts! (is-some (map-get? members tx-sender)) ERR_UNAUTHORIZED)
   (let
     (
       (proposal (unwrap! (map-get? proposals proposal-id) ERR_NOT_FOUND))
