@@ -61,7 +61,7 @@
   (let
     (
       (current-count (var-get proposal-count))
-      (start-height block-height)
+      (start-height burn-block-height)
       (end-height (+ start-height VOTING_PERIOD))
       (new-proposal {
         proposer: tx-sender,
@@ -100,7 +100,7 @@
     )
     ;; Checks
     (asserts! (is-eq (get status proposal) "active") ERR_PROPOSAL_NOT_ACTIVE)
-    (asserts! (<= block-height (get end-block proposal)) ERR_PROPOSAL_EXPIRED)
+    (asserts! (<= burn-block-height (get end-block proposal)) ERR_PROPOSAL_EXPIRED)
     (asserts! (is-none voter-participation) ERR_ALREADY_VOTED)
     
     ;; Update Proposal
@@ -143,7 +143,7 @@
     (
       (proposal (unwrap! (map-get? proposals proposal-id) ERR_NOT_FOUND))
     )
-    (asserts! (> block-height (get end-block proposal)) ERR_EXECUTION_DELAY_NOT_MET)
+    (asserts! (> burn-block-height (get end-block proposal)) ERR_EXECUTION_DELAY_NOT_MET)
     (asserts! (is-eq (get status proposal) "active") ERR_PROPOSAL_NOT_ACTIVE)
     
     (let
