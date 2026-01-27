@@ -11,7 +11,7 @@ plan:
         - contract-publish:
             contract-name: bitgov
             expected-sender: SP1GNDB8SXJ51GBMSVVXMWGTPRFHGSMWNNBEY25A4
-            cost: 1149777
+            cost: 62500
             path: contracts/bitgov.clar
             anchor-block-only: true
             clarity-version: 4
