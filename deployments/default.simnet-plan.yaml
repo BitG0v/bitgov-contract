@@ -67,5 +67,5 @@ plan:
             contract-name: bitgov
             emulated-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
             path: contracts/bitgov.clar
-            clarity-version: 4
+            clarity-version: 2
       epoch: "3.3"
