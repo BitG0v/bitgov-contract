@@ -9,10 +9,10 @@ plan:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: bitgov
+            contract-name: bitgov-v2
             expected-sender: SP1GNDB8SXJ51GBMSVVXMWGTPRFHGSMWNNBEY25A4
-            cost: 62500
+            cost: 1380881
             path: contracts/bitgov.clar
             anchor-block-only: true
-            clarity-version: 4
+            clarity-version: 2
       epoch: "3.3"
