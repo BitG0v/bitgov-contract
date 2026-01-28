@@ -5,9 +5,9 @@ authors = []
 telemetry = true
 cache_dir = './.cache'
 requirements = []
-[contracts.bitgov]
+[contracts.bitgov-v2]
 path = 'contracts/bitgov.clar'
-clarity_version = 4
+clarity_version = 2
 epoch = 'latest'
 [repl.analysis]
 passes = [

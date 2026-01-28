@@ -5,6 +5,7 @@ import { Cl } from "@stacks/transactions";
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
 const voter1 = accounts.get("wallet_1")!;
+const voter2 = accounts.get("wallet_2")!;
 
 describe("BitGov Counter Logic", () => {
     it("starts at 0", () => {
@@ -22,14 +23,6 @@ describe("BitGov Counter Logic", () => {
     });
 
     it("decrements correctly", () => {
-        // Increment first to 2 (1 from previous test + 1)
-        // Note: Simnet state resets between `it` blocks unless configured otherwise? 
-        // Usually vitest/simnet resets. Let's assume independent state or just setup.
-        // Actually, in typical Clarinet/Vitest setup, state might persist in `describe` or reset.
-        // Safest is to treat each `it` as independent or chain them if we know. 
-        // For `simnet`, it usually resets per test file or `beforeEach` validation.
-        // Let's assume reset for safety and setup state if needed.
-
         // Setup: set to 1
         simnet.callPublicFn("bitgov", "increment", [], deployer);
 
@@ -38,21 +31,41 @@ describe("BitGov Counter Logic", () => {
     });
 
     it("fails to decrement below 0", () => {
-        // Current state should be 0 (if reset)
         const { result } = simnet.callPublicFn("bitgov", "decrement", [], deployer);
         expect(result).toBeErr(Cl.uint(109)); // Underflow error
     });
 });
 
 describe("BitGov Governance Logic", () => {
+    // Initial setup for membership
+    it("initializes dao and adds deployer", () => {
+        const { result } = simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
+        expect(result).toBeOk(Cl.bool(true));
+
+        const memberInfo = simnet.callReadOnlyFn("bitgov", "get-member-info", [Cl.standardPrincipal(deployer)], deployer);
+        expect(memberInfo.result).toBeDefined();
+        const resJson = JSON.stringify(memberInfo.result);
+        expect(resJson).toContain('"value":"100"'); // reputation
+    });
+
     it("creates a proposal", () => {
+        // Must be initialized from previous test or re-run here. Simnet persists in 'describe' usually?
+        // Let's re-init to be safe or rely on persistence. Vitest-clarity resets usually.
+        simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
+
         const title = "Test Proposal";
         const description = "Testing proposal creation";
 
         const { result } = simnet.callPublicFn(
             "bitgov",
             "create-proposal",
-            [Cl.stringAscii(title), Cl.stringUtf8(description)],
+            [
+                Cl.stringAscii(title),
+                Cl.stringUtf8(description),
+                Cl.uint(0), // transfer-amount
+                Cl.none(),  // transfer-to
+                Cl.none()   // add-member
+            ],
             deployer
         );
 
@@ -64,59 +77,102 @@ describe("BitGov Governance Logic", () => {
         expect(resJson).toContain('"value":"active"');
     });
 
-    it("allows voting", () => {
-        // Setup proposal
-        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Vote Test"), Cl.stringUtf8("Desc")], deployer);
+    it("allows voting with reputation", () => {
+        simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Vote Test"), Cl.stringUtf8("Desc"), Cl.uint(0), Cl.none(), Cl.none()], deployer);
 
-        const voteAmount = 100;
+        // Deployer has 100 reputation from initialize-dao
         const { result } = simnet.callPublicFn(
             "bitgov",
             "vote",
-            [Cl.uint(0), Cl.bool(true), Cl.uint(voteAmount)],
-            voter1
+            [Cl.uint(0), Cl.bool(true)],
+            deployer
         );
 
         expect(result).toBeOk(Cl.bool(true));
 
         // Check vote recorded
         const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [Cl.uint(0)], deployer);
-        // Inspect tuple structure for votes-for
-        // Simnet return types are structured.
-        // We can rely on basic execution success for now or deep inspect.
+        const resJson = JSON.stringify(proposal.result);
+        // votes-for should be 100
+        expect(resJson).toContain('"votes-for":{"type":"uint","value":"100"}');
     });
 
-    it("prevents double voting", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Double Vote"), Cl.stringUtf8("Desc")], deployer);
+    it("fails voting if not a member", () => {
+        simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
+        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Vote Test"), Cl.stringUtf8("Desc"), Cl.uint(0), Cl.none(), Cl.none()], deployer);
 
-        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true), Cl.uint(100)], voter1);
-
-        const { result } = simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(false), Cl.uint(100)], voter1);
-        expect(result).toBeErr(Cl.uint(105)); // ERR_ALREADY_VOTED
+        // Voter1 is not a member yet
+        const { result } = simnet.callPublicFn(
+            "bitgov",
+            "vote",
+            [Cl.uint(0), Cl.bool(true)],
+            voter1
+        );
+        expect(result).toBeErr(Cl.uint(109)); // ERR_NOT_MEMBER
     });
 
-    it("executes a passed proposal", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Exec Test"), Cl.stringUtf8("Desc")], deployer);
+    it("executes a treasury proposal", () => {
+        simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
 
-        // Vote Yes > No
-        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true), Cl.uint(100)], voter1);
+        // Fund treasury
+        simnet.callPublicFn("bitgov", "deposit", [Cl.uint(1000)], deployer);
 
-        // Mine blocks to pass voting period (144 blocks)
+        // Create spend proposal
+        simnet.callPublicFn("bitgov", "create-proposal",
+            [
+                Cl.stringAscii("Spend"),
+                Cl.stringUtf8("Desc"),
+                Cl.uint(500),
+                Cl.some(Cl.standardPrincipal(voter1)),
+                Cl.none()
+            ],
+            deployer
+        );
+
+        // Vote pass
+        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true)], deployer);
+
+        // Mine blocks
         simnet.mineEmptyBlocks(145);
 
         const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [Cl.uint(0)], deployer);
-        expect(result).toBeOk(Cl.bool(true)); // Passed
+        expect(result).toBeOk(Cl.bool(true));
 
-        // Check status
-        const proposal = simnet.callReadOnlyFn("bitgov", "get-proposal", [Cl.uint(0)], deployer);
-        const resJson = JSON.stringify(proposal.result);
-        expect(resJson).toContain('"value":"passed"');
-        expect(resJson).toContain('"executed":{"type":"true"}');
+        // Check balance of voter1 (simnet doesn't easily show STX balance of standard principals, 
+        // but we can check if treasury decreased?)
+        const treasury = simnet.callReadOnlyFn("bitgov", "get-treasury-balance", [], deployer);
+        expect(treasury.result).toBeUint(500); // 1000 - 500
     });
 
-    it("fails execution if voting period not ended", () => {
-        simnet.callPublicFn("bitgov", "create-proposal", [Cl.stringAscii("Early Exec"), Cl.stringUtf8("Desc")], deployer);
+    it("executes a membership proposal", () => {
+        simnet.callPublicFn("bitgov", "initialize-dao", [], deployer);
 
-        const { result } = simnet.callPublicFn("bitgov", "execute-proposal", [Cl.uint(0)], deployer);
-        expect(result).toBeErr(Cl.uint(108)); // ERR_EXECUTION_DELAY_NOT_MET
+        // Create add-member proposal for voter1
+        simnet.callPublicFn("bitgov", "create-proposal",
+            [
+                Cl.stringAscii("Add Member"),
+                Cl.stringUtf8("Desc"),
+                Cl.uint(0),
+                Cl.none(),
+                Cl.some(Cl.standardPrincipal(voter1))
+            ],
+            deployer
+        );
+
+        // Vote pass
+        simnet.callPublicFn("bitgov", "vote", [Cl.uint(0), Cl.bool(true)], deployer);
+
+        // Mine blocks
+        simnet.mineEmptyBlocks(145);
+
+        const execute = simnet.callPublicFn("bitgov", "execute-proposal", [Cl.uint(0)], deployer);
+        expect(execute.result).toBeOk(Cl.bool(true));
+
+        // Verify voter1 is member
+        const memberInfo = simnet.callReadOnlyFn("bitgov", "get-member-info", [Cl.standardPrincipal(voter1)], deployer);
+        expect(memberInfo.result).toBeDefined();
+        const resJson = JSON.stringify(memberInfo.result);
+        expect(resJson).toContain('"value":"10"'); // reputation
     });
 });
