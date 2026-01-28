@@ -43,7 +43,9 @@ describe("BitGov Governance Logic", () => {
         expect(result).toBeOk(Cl.bool(true));
 
         const memberInfo = simnet.callReadOnlyFn("bitgov", "get-member-info", [Cl.standardPrincipal(deployer)], deployer);
-        expect(memberInfo.result).toBeSome();
+        expect(memberInfo.result).toBeDefined();
+        const resJson = JSON.stringify(memberInfo.result);
+        expect(resJson).toContain('"value":"100"'); // reputation
     });
 
     it("creates a proposal", () => {
@@ -169,6 +171,8 @@ describe("BitGov Governance Logic", () => {
 
         // Verify voter1 is member
         const memberInfo = simnet.callReadOnlyFn("bitgov", "get-member-info", [Cl.standardPrincipal(voter1)], deployer);
-        expect(memberInfo.result).toBeSome();
+        expect(memberInfo.result).toBeDefined();
+        const resJson = JSON.stringify(memberInfo.result);
+        expect(resJson).toContain('"value":"10"'); // reputation
     });
 });
